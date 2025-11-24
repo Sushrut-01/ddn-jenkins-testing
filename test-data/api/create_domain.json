@@ -1,0 +1,12 @@
+{
+  "domain_name": "tenant1.ddn.local",
+  "description": "Test domain for tenant 1",
+  "storage_quota_gb": 1000,
+  "isolation_level": "strict",
+  "network_policy": "isolated",
+  "tags": {
+    "environment": "test",
+    "tenant": "tenant1",
+    "purpose": "automated-testing"
+  }
+}

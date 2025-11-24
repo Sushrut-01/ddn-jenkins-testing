@@ -1,0 +1,20 @@
+{
+  "bucket_name": "tenant1-data-bucket",
+  "region": "us-east-1",
+  "tenant_id": "tenant1",
+  "versioning": true,
+  "encryption": {
+    "type": "SSE-S3",
+    "enabled": true
+  },
+  "lifecycle_rules": [
+    {
+      "id": "archive-old-data",
+      "enabled": true,
+      "transition": {
+        "days": 90,
+        "storage_class": "GLACIER"
+      }
+    }
+  ]
+}

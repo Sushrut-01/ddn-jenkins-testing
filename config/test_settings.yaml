@@ -1,0 +1,34 @@
+test_execution:
+  max_retries: 3
+  retry_interval: 2s
+  default_timeout: 30s
+  api_timeout: 10s
+  parallel_execution: false
+  fail_fast: false
+  
+reporting:
+  output_format: html
+  include_screenshots: true
+  include_logs: true
+  log_level: INFO
+  timestamp_outputs: true
+  report_title: "DDN Storage Test Results"
+  
+mongodb:
+  enabled: true
+  collection: test_failures
+  connection_timeout: 5000
+  retry_writes: true
+  capture_full_logs: false
+  
+performance:
+  benchmark_enabled: true
+  min_throughput_gbps: 1.0
+  max_latency_ms: 100
+  
+notifications:
+  enabled: false
+  on_failure: true
+  on_success: false
+  email: []
+  slack_webhook: ""

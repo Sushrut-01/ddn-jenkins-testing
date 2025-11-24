@@ -1,0 +1,12 @@
+{
+  "namespace": "tenant1_namespace",
+  "domain": "tenant1.ddn.local",
+  "quota_gb": 500,
+  "deduplication": true,
+  "compression": true,
+  "encryption": "AES-256",
+  "access_control": {
+    "mode": "private",
+    "allowed_users": ["tenant1_user1", "tenant1_user2"]
+  }
+}
