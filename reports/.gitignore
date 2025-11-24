@@ -1,0 +1,10 @@
+# Test execution reports
+*.xml
+*.html
+*.png
+log.html
+output.xml
+report.html
+
+# But keep the directory
+!.gitkeep
