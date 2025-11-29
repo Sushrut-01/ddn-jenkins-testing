@@ -1,0 +1,105 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description>DDN Storage Advanced Tests - Robot Framework tests for domain isolation, multi-tenancy, quota, S3, and security with MongoDB reporting</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <jenkins.model.BuildDiscarderProperty>
+      <strategy class="hudson.tasks.LogRotator">
+        <daysToKeep>30</daysToKeep>
+        <numToKeep>50</numToKeep>
+        <artifactDaysToKeep>-1</artifactDaysToKeep>
+        <artifactNumToKeep>-1</artifactNumToKeep>
+      </strategy>
+    </jenkins.model.BuildDiscarderProperty>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.BooleanParameterDefinition>
+          <name>SEND_NOTIFICATIONS</name>
+          <description>Send notifications to Teams/Slack on failure</description>
+          <defaultValue>true</defaultValue>
+        </hudson.model.BooleanParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <triggers>
+    <hudson.triggers.TimerTrigger>
+      <spec>H/30 * * * *</spec>
+    </hudson.triggers.TimerTrigger>
+  </triggers>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+echo "========================================="
+echo "DDN Advanced Tests (Robot Framework)"
+echo "Build: $BUILD_NUMBER"
+echo "Job: $JOB_NAME"
+echo "========================================="
+
+# Git checkout
+REPO_URL="https://github.com/Sushrut-01/ddn-jenkins-testing.git"
+echo "Checking out code from $REPO_URL..."
+if [ -d ".git" ]; then
+    git fetch origin
+    git reset --hard origin/main
+    git clean -fd
+else
+    rm -rf * .[^.]*
+    git clone "$REPO_URL" .
+fi
+export GIT_COMMIT=$(git rev-parse HEAD)
+export GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+echo "Git Branch: $GIT_BRANCH | Commit: $GIT_COMMIT"
+
+# Install dependencies
+echo "Installing Robot Framework dependencies..."
+python3 -m pip install --quiet --upgrade pip --break-system-packages 2>/dev/null || python3 -m pip install --quiet --upgrade pip
+python3 -m pip install --quiet --break-system-packages robotframework pymongo python-dotenv boto3 requests 2>/dev/null || python3 -m pip install --quiet robotframework pymongo python-dotenv boto3 requests
+
+# MongoDB configuration
+export MONGODB_URI='mongodb+srv://sushrutnistane097_db_user:Sharu%40051220@ddn-cluster.wudcfln.mongodb.net/ddn_tests?retryWrites=true&amp;w=majority'
+export JOB_NAME="$JOB_NAME"
+export BUILD_NUMBER="$BUILD_NUMBER"
+export BUILD_URL="$BUILD_URL"
+
+# Create output directory
+mkdir -p robot-results
+
+# Run ADVANCED Robot Framework tests only
+echo "Running Advanced Robot Framework tests..."
+python3 -m robot \
+    --outputdir robot-results \
+    --listener implementation.mongodb_robot_listener.MongoDBListener \
+    --name "DDN_Advanced_Tests" \
+    robot-tests/ddn_advanced_tests.robot
+
+echo "========================================="
+echo "Advanced Tests completed!"
+echo "========================================="</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers>
+    <hudson.tasks.ArtifactArchiver>
+      <artifacts>robot-results/**/*</artifacts>
+      <allowEmptyArchive>true</allowEmptyArchive>
+      <onlyIfSuccessful>false</onlyIfSuccessful>
+      <fingerprint>false</fingerprint>
+      <defaultExcludes>true</defaultExcludes>
+      <caseSensitive>true</caseSensitive>
+      <followSymlinks>false</followSymlinks>
+    </hudson.tasks.ArtifactArchiver>
+  </publishers>
+  <buildWrappers>
+    <hudson.plugins.timestamper.TimestamperBuildWrapper plugin="timestamper@1.26"/>
+    <hudson.plugins.ansicolor.AnsiColorBuildWrapper plugin="ansicolor@1.0.0">
+      <colorMapName>xterm</colorMapName>
+    </hudson.plugins.ansicolor.AnsiColorBuildWrapper>
+  </buildWrappers>
+</project>
