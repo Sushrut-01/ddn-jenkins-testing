@@ -81,9 +81,17 @@ mkdir -p robot-results
 echo "Running ALL Robot Framework tests (Nightly Comprehensive Suite)..."
 python3 -m robot \
     --outputdir robot-results \
+    --xunit robot-results/xunit.xml \
     --listener implementation.mongodb_robot_listener.MongoDBListener \
     --name "DDN_Nightly_Comprehensive_Tests" \
     robot-tests/
+
+# Generate JUnit-compatible output for Jenkins
+ROBOT_EXIT_CODE=$?
+echo "Robot Framework exit code: $ROBOT_EXIT_CODE"
+
+# Exit with the robot exit code to properly mark build as UNSTABLE/FAILURE
+exit $ROBOT_EXIT_CODE
 
 echo "========================================="
 echo "Nightly Comprehensive Tests completed!"
@@ -102,11 +110,110 @@ echo "========================================="</command>
       <caseSensitive>true</caseSensitive>
       <followSymlinks>false</followSymlinks>
     </hudson.tasks.ArtifactArchiver>
-    <hudson.tasks.Mailer plugin="mailer@1.34">
-      <recipients>your-email@company.com</recipients>
-      <dontNotifyEveryUnstableBuild>false</dontNotifyEveryUnstableBuild>
-      <sendToIndividuals>false</sendToIndividuals>
-    </hudson.tasks.Mailer>
+    <!-- Robot Framework Publisher for test results visualization -->
+    <hudson.plugins.robot.RobotPublisher plugin="robot@3.4.0">
+      <outputPath>robot-results</outputPath>
+      <reportFileName>report.html</reportFileName>
+      <logFileName>log.html</logFileName>
+      <outputFileName>output.xml</outputFileName>
+      <disableArchiveOutput>false</disableArchiveOutput>
+      <passThreshold>100.0</passThreshold>
+      <unstableThreshold>0.0</unstableThreshold>
+      <otherFiles></otherFiles>
+      <enableCache>true</enableCache>
+      <onlyCritical>false</onlyCritical>
+    </hudson.plugins.robot.RobotPublisher>
+    <!-- JUnit Publisher for xunit.xml results -->
+    <hudson.tasks.junit.JUnitResultArchiver plugin="junit@1.68">
+      <testResults>robot-results/xunit.xml</testResults>
+      <keepLongStdio>false</keepLongStdio>
+      <healthScaleFactor>1.0</healthScaleFactor>
+      <allowEmptyResults>true</allowEmptyResults>
+    </hudson.tasks.junit.JUnitResultArchiver>
+    <!-- Extended Email notification -->
+    <hudson.plugins.emailext.ExtendedEmailPublisher plugin="email-ext@1291.v8e1f86750de9">
+      <recipientList>$DEFAULT_RECIPIENTS</recipientList>
+      <configuredTriggers>
+        <hudson.plugins.emailext.plugins.trigger.FailureTrigger>
+          <email>
+            <subject>[NIGHTLY] $PROJECT_NAME - Build #$BUILD_NUMBER - FAILURE</subject>
+            <body>Nightly Build $BUILD_NUMBER of $PROJECT_NAME has FAILED.
+
+Build URL: $BUILD_URL
+Console: $BUILD_URL/console
+
+CRITICAL: Nightly test suite encountered failures!
+View failures in dashboard: http://localhost:5173
+
+This is an automated message from Jenkins.</body>
+            <recipientProviders>
+              <hudson.plugins.emailext.plugins.recipients.DevelopersRecipientProvider/>
+              <hudson.plugins.emailext.plugins.recipients.RequesterRecipientProvider/>
+            </recipientProviders>
+            <attachmentsPattern></attachmentsPattern>
+            <attachBuildLog>false</attachBuildLog>
+            <compressBuildLog>false</compressBuildLog>
+            <replyTo>$DEFAULT_REPLYTO</replyTo>
+            <contentType>default</contentType>
+          </email>
+        </hudson.plugins.emailext.plugins.trigger.FailureTrigger>
+        <hudson.plugins.emailext.plugins.trigger.UnstableTrigger>
+          <email>
+            <subject>[NIGHTLY] $PROJECT_NAME - Build #$BUILD_NUMBER - UNSTABLE (Test Failures)</subject>
+            <body>Nightly Build $BUILD_NUMBER of $PROJECT_NAME is UNSTABLE with test failures.
+
+Build URL: $BUILD_URL
+Console: $BUILD_URL/console
+Test Results: $BUILD_URL/robot/
+
+View failures in dashboard: http://localhost:5173
+
+This is an automated message from Jenkins.</body>
+            <recipientProviders>
+              <hudson.plugins.emailext.plugins.recipients.DevelopersRecipientProvider/>
+            </recipientProviders>
+            <attachmentsPattern></attachmentsPattern>
+            <attachBuildLog>false</attachBuildLog>
+            <compressBuildLog>false</compressBuildLog>
+            <replyTo>$DEFAULT_REPLYTO</replyTo>
+            <contentType>default</contentType>
+          </email>
+        </hudson.plugins.emailext.plugins.trigger.UnstableTrigger>
+        <hudson.plugins.emailext.plugins.trigger.SuccessTrigger>
+          <email>
+            <subject>[NIGHTLY] $PROJECT_NAME - Build #$BUILD_NUMBER - SUCCESS</subject>
+            <body>Nightly Build $BUILD_NUMBER of $PROJECT_NAME completed SUCCESSFULLY.
+
+Build URL: $BUILD_URL
+Test Results: $BUILD_URL/robot/
+
+All tests passed! Dashboard: http://localhost:5173
+
+This is an automated message from Jenkins.</body>
+            <recipientProviders>
+              <hudson.plugins.emailext.plugins.recipients.DevelopersRecipientProvider/>
+            </recipientProviders>
+            <attachmentsPattern></attachmentsPattern>
+            <attachBuildLog>false</attachBuildLog>
+            <compressBuildLog>false</compressBuildLog>
+            <replyTo>$DEFAULT_REPLYTO</replyTo>
+            <contentType>default</contentType>
+          </email>
+        </hudson.plugins.emailext.plugins.trigger.SuccessTrigger>
+      </configuredTriggers>
+      <contentType>default</contentType>
+      <defaultSubject>$DEFAULT_SUBJECT</defaultSubject>
+      <defaultBody>$DEFAULT_CONTENT</defaultBody>
+      <attachmentsPattern></attachmentsPattern>
+      <presendScript></presendScript>
+      <postsendScript></postsendScript>
+      <attachBuildLog>false</attachBuildLog>
+      <compressBuildLog>false</compressBuildLog>
+      <replyTo>$DEFAULT_REPLYTO</replyTo>
+      <from></from>
+      <saveOutput>false</saveOutput>
+      <disabled>false</disabled>
+    </hudson.plugins.emailext.ExtendedEmailPublisher>
   </publishers>
   <buildWrappers>
     <hudson.plugins.timestamper.TimestamperBuildWrapper plugin="timestamper@1.26"/>

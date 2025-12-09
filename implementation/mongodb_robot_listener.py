@@ -29,6 +29,7 @@ load_dotenv()
 class MongoDBListener:
     """
     Robot Framework listener that sends test failures to MongoDB
+    Phase 5: Now also stores build-level results in build_results collection
     """
 
     ROBOT_LISTENER_API_VERSION = 3
@@ -47,6 +48,8 @@ class MongoDBListener:
             self.client = MongoClient(self.mongodb_uri)
             self.db = self.client[self.mongodb_db]
             self.collection = self.db['test_failures']
+            # Phase 5: Add build_results collection for build-level tracking
+            self.build_results_collection = self.db['build_results']
 
             # Test connection
             self.client.server_info()
@@ -214,10 +217,106 @@ class MongoDBListener:
             print(f"[MongoDB Listener] Suite ended: {result.name} - Status: {result.status}")
 
     def close(self):
-        """Called when all tests are completed"""
+        """
+        Called when all tests are completed
+        Phase 5: Now also stores build-level result in build_results collection
+        """
         if self.client:
-            print("[MongoDB Listener] Closing MongoDB connection")
-            self.client.close()
+            try:
+                # Phase 5: Store build-level result
+                self._store_build_result()
+            except Exception as e:
+                print(f"[MongoDB Listener] WARNING: Failed to store build result: {e}")
+            finally:
+                print("[MongoDB Listener] Closing MongoDB connection")
+                self.client.close()
+
+    def _store_build_result(self):
+        """
+        Phase 5: Store build-level result to build_results collection
+        This captures the overall build outcome (SUCCESS/FAILURE) from Jenkins
+        """
+        import requests
+
+        build_url = os.getenv('BUILD_URL', '')
+        build_result = 'UNKNOWN'
+        build_duration_ms = 0
+        build_trigger = 'Unknown'
+
+        # Try to get build result from Jenkins API
+        if build_url:
+            try:
+                # Get Jenkins credentials from environment
+                jenkins_user = os.getenv('JENKINS_USER', 'admin')
+                jenkins_password = os.getenv('JENKINS_PASSWORD', 'admin123')
+
+                api_url = f"{build_url}api/json"
+                response = requests.get(
+                    api_url,
+                    auth=(jenkins_user, jenkins_password),
+                    timeout=10
+                )
+
+                if response.status_code == 200:
+                    build_data = response.json()
+                    build_result = build_data.get('result', 'UNKNOWN')
+                    if build_result is None:
+                        build_result = 'IN_PROGRESS'
+                    build_duration_ms = build_data.get('duration', 0)
+
+                    # Extract trigger type
+                    for action in build_data.get('actions', []):
+                        if action.get('_class') == 'hudson.model.CauseAction':
+                            for cause in action.get('causes', []):
+                                cause_class = cause.get('_class', '')
+                                if 'TimerTrigger' in cause_class:
+                                    build_trigger = 'TimerTrigger'
+                                elif 'UserIdCause' in cause_class:
+                                    build_trigger = 'UserTrigger'
+                                elif 'RemoteCause' in cause_class:
+                                    build_trigger = 'RemoteTrigger'
+                                else:
+                                    build_trigger = cause.get('shortDescription', 'Unknown')
+                                break
+            except Exception as e:
+                print(f"[MongoDB Listener] WARNING: Could not fetch Jenkins build result: {e}")
+
+        # Get final counts from suite stats
+        pass_count = self.current_suite_stats.get('pass_count', 0) if self.current_suite_stats else 0
+        fail_count = self.current_suite_stats.get('fail_count', 0) if self.current_suite_stats else 0
+        total_count = self.current_suite_stats.get('total_count', 0) if self.current_suite_stats else 0
+
+        # Create build result document
+        build_doc = {
+            'job_name': self.job_name,
+            'build_number': int(self.build_number) if self.build_number != 'local' else 0,
+            'build_id': f"{self.job_name}-{self.build_number}",
+            'build_result': build_result,
+            'build_duration_ms': build_duration_ms,
+            'build_trigger': build_trigger,
+            'build_url': build_url,
+            'timestamp': datetime.utcnow(),
+            'test_pass_count': pass_count,
+            'test_fail_count': fail_count,
+            'test_total_count': total_count,
+            'analyzed': False,
+            'analyzed_at': None,
+            'analysis_id': None,
+            'source': 'robot_listener'
+        }
+
+        # Upsert to avoid duplicates
+        try:
+            self.build_results_collection.update_one(
+                {'build_id': build_doc['build_id']},
+                {'$set': build_doc},
+                upsert=True
+            )
+            print(f"[MongoDB Listener] ✓ Build result stored: {build_doc['build_id']} - "
+                  f"Result: {build_result}, "
+                  f"Pass: {pass_count}, Fail: {fail_count}, Total: {total_count}")
+        except Exception as e:
+            print(f"[MongoDB Listener] ERROR storing build result: {e}")
 
 # This allows the listener to be used directly from command line
 if __name__ == '__main__':
